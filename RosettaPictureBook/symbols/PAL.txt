@@ -1,2 +1,0 @@
-getStarPointerOnOffController__22@unnamed@UniBuild_cpp@Fv=0x8005BCB0
-sInstance__Q214NrvIconAButton18IconAButtonNrvOpen=0x807DACE0
