@@ -1,5 +1,4 @@
 #include "syati.h"
-#include "NameObjArchiveListCollector.h"
 #include "PictureBookLayout.h"
 
 class LayoutManager {
@@ -63,8 +62,9 @@ public:
     J3DFrameCtrl* getFrameCtrl(u32);
 };
 
-namespace {
-    StarPointerOnOffController* getStarPointerOnOffController();
+extern "C" {
+    StarPointerOnOffController* __kAutoMap_8005BCB0();  // getStarPointerOnOffController()
+    GameScene* __kAutoMap_80452A70();   // getGameScene()
 }
 
 namespace MR
@@ -75,10 +75,10 @@ namespace MR
     nw4r::lyt::TexMap* createLytTexMap(const char*, const char*);
     void replacePaneTexture(LayoutActor*, const char*, const nw4r::lyt::TexMap*, u8);
     void activateGameSceneDraw3D() {
-        getGameScene()->mDraw3D = true;
+        __kAutoMap_80452A70()->mDraw3D = true;
     }
     void deactivateGameSceneDraw3D() {
-        getGameScene()->mDraw3D = false; 
+        __kAutoMap_80452A70()->mDraw3D = false; 
     }
     bool isExistResourceInArc(const char* pArchive, const char* pFile) {
         char path[64];
@@ -91,7 +91,7 @@ namespace MR
         return holder->mFileInfoTable->isExistRes(pFile); */
     }
     void requestStarPointerModePictureBook(void* v) {
-        StarPointerOnOffController* pController = getStarPointerOnOffController();
+        StarPointerOnOffController* pController = __kAutoMap_8005BCB0();
         pController->requestMode(v, (StarPointerModeEnum)7);  // Surprisignly, the code for this was left at SMG2. Idk if just left or if it's used somewhere else.
     }
     f32 calcNerveRate(const LayoutActor* pActor, s32 stepMin, s32 stepMax) {

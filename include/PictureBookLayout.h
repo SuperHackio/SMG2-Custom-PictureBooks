@@ -16,10 +16,6 @@ class IconAButton;
 class NameObjArchiveListCollector;
 class PictureBookCloseButton;
 
-namespace {
-    GameScene* getGameScene();
-}
-
 class PictureBookLayout : public LayoutActor {
 public:
     PictureBookLayout(s32 chapterMin, s32 chapterMax, bool isRosettaReading);

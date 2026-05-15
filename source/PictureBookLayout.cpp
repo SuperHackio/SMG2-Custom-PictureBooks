@@ -1,6 +1,5 @@
 #include "PictureBookCloseButton.h"
 #include "PictureBookLayout.h"
-#include "NameObjArchiveListCollector.h"
 #include "OtherUtils.h"
 
 namespace {
