@@ -1,0 +1,22 @@
+{
+  "Name": "Custom Storybooks",
+  "Author": "Aba Gamer",
+  "Description": "SMG1 port: PictureBook",
+  "InstallDependencies": ["Syati_ObjectFactories"],
+  "BuildTasks": [{
+    "Task": "Copy",
+    "From": "disc/",
+    "To": "../../Output/disc/"
+  }],
+  "ModuleData" : [
+    {
+      "NameObjFactory" : [
+        {
+          "Name" : "RosettaPictureBook",
+          "Function" : "createExtActor<RosettaPictureBook>",
+          "Include" : "RosettaPictureBook.h"
+        }
+      ]
+    }
+  ]
+}
