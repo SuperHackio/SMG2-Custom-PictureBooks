@@ -3,7 +3,6 @@
 #include "syati.h"
 
 class IconAButton;
-class NameObjArchiveListCollector;
 class PictureBookLayout;
 
 class RosettaPictureBook : public LiveActor {
@@ -17,8 +16,6 @@ public:
     virtual void kill();
     virtual void control();
     virtual void attackSensor(HitSensor* pSender, HitSensor* pReceiver);
-
-    static void makeArchiveList(NameObjArchiveListCollector* pCollector, const JMapInfoIter& rIter);
 
     void exeWait();
     void exeDemoWait();

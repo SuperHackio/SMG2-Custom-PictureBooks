@@ -68,7 +68,23 @@ namespace {
 
         return 1;
     }
-};
+
+    void openWithTurn(IconAButton* pAButton) {
+        pAButton->appear();
+        pAButton->updateFollowPos();
+        MR::showPane(pAButton, "PicPlate");
+        pAButton->setNerve(&NrvIconAButton::IconAButtonNrvOpen::sInstance);
+        MR::setTextBoxGameMessageRecursive(pAButton, "IconAButton", "Layout_SystemTurn");
+    }
+
+    void setTextBoxHorizontalPositionRecursive(LayoutActor* pActor, const char* pPaneName, u8 position) {
+        MR::executeTextBoxRecursive(pActor, pPaneName, TextBoxRecursiveSetHorizontalPosition(position));
+    }
+
+    void setTextBoxVerticalPositionRecursive(LayoutActor* pActor, const char* pPaneName, u8 position) {
+        MR::executeTextBoxRecursive(pActor, pPaneName, TextBoxRecursiveSetVerticalPosition(position));
+    }
+}
 
 namespace NrvPictureBookLayout {
     FULL_NERVE(PictureBookLayoutNrvOpen, PictureBookLayout, Open);
@@ -84,8 +100,18 @@ namespace NrvPictureBookLayout {
     FULL_NERVE(PictureBookLayoutNrvClose, PictureBookLayout, Close);
 };
 
+namespace {
+    void setTextOrDefault(LayoutActor* pBookLayout, const char* pPaneName, const char* pMessageLabel, const wchar_t* pFailsafeText) {
+        const wchar_t* pMsg = MR::getGameMessageDirect(pMessageLabel);
+        if (pMsg == nullptr)
+            pMsg = pFailsafeText;
+
+        MR::setTextBoxMessageRecursive(pBookLayout, pPaneName, pMsg);
+    }
+}
+
 PictureBookLayout::PictureBookLayout(s32 chapterMin, s32 chapterMax, bool isRosettaReading) :
-    LayoutActor("çµµæœ¬ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ", true),
+    LayoutActor("ŠG–{ƒŒƒCƒAƒEƒg", true),
     mChapterMin(chapterMin),
     mChapterMax(chapterMax),
     mChapterRosettaMax(chapterMax),
@@ -171,7 +197,7 @@ void PictureBookLayout::kill() {
         mCloseButton->kill();
     }
 
-    MR::startCurrentStageBGM();
+    MR::startCurrentStageBGM(false);
     MR::pauseOffCameraDirector();
     MR::activateGameSceneDraw3D();
 }
@@ -234,8 +260,7 @@ void PictureBookLayout::initContentsButton() {
         // mContentsButtonPaneController[i]->invalidateAppearance();    Seems like nothing strange happens when this is not on, so...
 
         snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Title", i + 1);
-
-        MR::setTextBoxGameMessageRecursive(this, cContentsPaneName[i], messageId);
+        setTextOrDefault(this, cContentsPaneName[i], messageId, L"Untitled Chapter");
     }
 }
 
@@ -245,7 +270,7 @@ bool PictureBookLayout::updateText() {
     if (mPageNo == 0) {
         
         snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Title", mChapterNo);
-        MR::setTextBoxGameMessageRecursive(this, "Title", messageId);
+        setTextOrDefault(this, "Title", messageId, L"- Untitled Chapter -");
 
         return true;
     }
@@ -253,7 +278,7 @@ bool PictureBookLayout::updateText() {
         snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Page%d_%03d", mChapterNo, mPageNo, mTextIndex);
 
         if (MR::isExistGameMessage(messageId)) {
-            MR::setTextBoxGameMessageRecursive(this, "Text", messageId);
+            setTextOrDefault(this, "Text", messageId, L"[...]");
 
             return true;
         }
@@ -675,12 +700,12 @@ void PictureBookLayout::exeFadeInText() {
         // Here there was a bunch of code for the music on special pages //
        
         if (isBookEndCurrentText()) {
-            Other::setTextBoxHorizontalPositionRecursive(this, "Text", 1);
+            setTextBoxHorizontalPositionRecursive(this, "Text", 1);
             MR::setTextBoxVerticalPositionCenterRecursive(this, "Text");
         }
         else {
-            Other::setTextBoxHorizontalPositionRecursive(this, "Text", 0);
-            Other::setTextBoxVerticalPositionRecursive(this, "Text", 0);   // Crazy that TopRecursive isn't in SMG2 when it would be just a copy of SMG1
+            setTextBoxHorizontalPositionRecursive(this, "Text", 0);
+            setTextBoxVerticalPositionRecursive(this, "Text", 0);   // Crazy that TopRecursive isn't in SMG2 when it would be just a copy of SMG1
         }
 
         if (mIsNextItemFast && !isReadedCurrentText()) {
@@ -704,7 +729,7 @@ void PictureBookLayout::exeFadeInText() {
 
 void PictureBookLayout::exeWaitWithText() {
     if (MR::isFirstStep(this)) {
-        Other::openWithTurn(mIconAButton);
+        openWithTurn(mIconAButton);
     }
 
     if (isValidCloseButton()) {

@@ -20,15 +20,19 @@ namespace NrvRosettaPictureBook {
     FULL_NERVE(HostTypeNrvFadeIn, RosettaPictureBook, FadeIn);
 };
 
-RosettaPictureBook::RosettaPictureBook(const char* pName)
-    : LiveActor(pName), mLayout(nullptr), mIconAButton(nullptr), mIsValidOpenIconAButton(false) {}
+RosettaPictureBook::RosettaPictureBook(const char* pName) : LiveActor(pName), mLayout(nullptr), mIconAButton(nullptr), mIsValidOpenIconAButton(false) {}
 
 void RosettaPictureBook::init(const JMapInfoIter& rIter) {
+    // TODO: This section can be converted into MR::processInitFunction once InitActor BCSV files are made
     MR::initDefaultPos(this, rIter);
     initModelManagerWithAnm("RosettaPictureBook", nullptr, nullptr, false);
     MR::connectToSceneMapObj(this);
     initHitSensor(1);
     MR::addHitSensorMapObjSimple(this, "body", 8, 150.0f, TVec3f(0.0f, 0.0f, 0.0f));
+
+    // ----------------------------------------------------
+
+
 
     mLayout = new PictureBookLayout(1, MR::getPictureBookChapterCanRead(), false);
     mLayout->initWithoutIter();
@@ -63,6 +67,7 @@ void RosettaPictureBook::attackSensor(HitSensor* pSender, HitSensor* pReceiver) 
     }
 }
 
+
 void RosettaPictureBook::exeWait() {
     if (mIsValidOpenIconAButton) {
         if (!mIconAButton->isOpen()) {
@@ -85,16 +90,7 @@ void RosettaPictureBook::exeWait() {
         return;
     }
     
-    DemoStartRequestUtil::requestStartDemo(  // Not 100% equal but...    MR::requestStartDemoMarioPuppetableWithoutCinemaFrame(LiveActor*, const char*, const Nerve*, const Nerve*)
-        this,
-        "ロゼッタ絵本デモ",
-        &NrvRosettaPictureBook::HostTypeNrvFadeOut::sInstance,
-        &NrvRosettaPictureBook::HostTypeNrvDemoWait::sInstance,
-        2,
-        DemoStartInfo::DEMOTYPE_0,
-        DemoStartInfo::CINEMAFRAMETYPE_1,
-        DemoStartInfo::STARPOINTERTYPE_0,
-        DemoStartInfo::DELETEEFFECTYPE_0);
+    DemoStartRequestUtil::requestStartDemo(this, "ロゼッタ絵本デモ", &NrvRosettaPictureBook::HostTypeNrvFadeOut::sInstance, &NrvRosettaPictureBook::HostTypeNrvDemoWait::sInstance, 2, DemoStartInfo::DEMOTYPE_0, DemoStartInfo::CINEMAFRAMETYPE_1, DemoStartInfo::STARPOINTERTYPE_0, DemoStartInfo::DELETEEFFECTYPE_0);
 }
 
 void RosettaPictureBook::exeDemoWait() {}
