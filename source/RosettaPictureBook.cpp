@@ -23,16 +23,7 @@ namespace NrvRosettaPictureBook {
 RosettaPictureBook::RosettaPictureBook(const char* pName) : LiveActor(pName), mLayout(nullptr), mIconAButton(nullptr), mIsValidOpenIconAButton(false) {}
 
 void RosettaPictureBook::init(const JMapInfoIter& rIter) {
-    // TODO: This section can be converted into MR::processInitFunction once InitActor BCSV files are made
-    MR::initDefaultPos(this, rIter);
-    initModelManagerWithAnm("RosettaPictureBook", nullptr, nullptr, false);
-    MR::connectToSceneMapObj(this);
-    initHitSensor(1);
-    MR::addHitSensorMapObjSimple(this, "body", 8, 150.0f, TVec3f(0.0f, 0.0f, 0.0f));
-
-    // ----------------------------------------------------
-
-
+    MR::processInitFunction(this, rIter, false);
 
     mLayout = new PictureBookLayout(1, MR::getPictureBookChapterCanRead(), false);
     mLayout->initWithoutIter();
@@ -42,12 +33,12 @@ void RosettaPictureBook::init(const JMapInfoIter& rIter) {
 
     initNerve(&NrvRosettaPictureBook::HostTypeNrvWait::sInstance, 0);
     MR::tryRegisterDemoCast(this, rIter);
+
     makeActorAppeared();
 }
 
 void RosettaPictureBook::appear() {
     mIsValidOpenIconAButton = false;
-
     setNerve(&NrvRosettaPictureBook::HostTypeNrvWait::sInstance);
     LiveActor::appear();
 }

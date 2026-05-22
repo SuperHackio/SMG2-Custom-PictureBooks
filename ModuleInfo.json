@@ -10,9 +10,9 @@
   }],
   "ModuleData" : [
     {
-      "NameObjFactory" : [
+      "ProductMapObj" : [
         {
-          "Name" : "RosettaPictureBook",
+          "Name" : "PictureBook",
           "Function" : "createExtActor<RosettaPictureBook>",
           "Include" : "RosettaPictureBook.h"
         }
