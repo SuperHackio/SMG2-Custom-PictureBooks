@@ -25,8 +25,35 @@ RosettaPictureBook::RosettaPictureBook(const char* pName) : LiveActor(pName), mL
 void RosettaPictureBook::init(const JMapInfoIter& rIter) {
     MR::processInitFunction(this, rIter, false);
 
-    mLayout = new PictureBookLayout(1, MR::getPictureBookChapterCanRead(), false);
-    mLayout->initWithoutIter();
+    const char* mObjectName;
+    MR::getObjectName(&mObjectName, rIter);
+    JMapInfo* InitActor = MR::createInitActorCsvParser(mObjectName, NULL);
+    if (InitActor == NULL) { // This should not happen
+        OSReport("%s.arc - InitActor.bcsv not found.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+    if (!MR::hasCsvDataItem(InitActor, "InitFunction", "Texture")) { // This setting is mandatory
+        OSReport("%s.arc - Texture not assigned.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+    const char* pBookTextureName;
+    MR::getCsvDataStrByElement(&pBookTextureName, InitActor, "InitFunction", "Texture", "Data");
+    const char* pLayoutOverride = "PictureBook"; // Default value
+    if (MR::hasCsvDataItem(InitActor, "InitFunction", "Layout"))
+        MR::getCsvDataStrByElement(&pLayoutOverride, InitActor, "InitFunction", "Layout", "Data");
+
+
+    mBookInfo = MR::tryCreateCsvParser(mObjectName, "InitBook.bcsv");
+    if (mBookInfo == nullptr) {
+        OSReport("%s.arc - InitBook.bcsv not found.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+
+    mLayout = new PictureBookLayout(MR::tryCreateCsvParser(mObjectName, "InitBgmBook.bcsv")); // Set the bool to TRUE to auto read, false for Chapter Select. Make this depend on new unlocks?
+    mLayout->initBookInfo(pBookTextureName, pLayoutOverride, mBookInfo);
 
     mIconAButton = new IconAButton(true, false);
     mIconAButton->initWithoutIter();
@@ -104,6 +131,7 @@ void RosettaPictureBook::exeFadeOut() {
 
 void RosettaPictureBook::exeReading() {
     if (MR::isFirstStep(this)) {
+        mLayout->prepare(false, mBookInfo); // RosettaReading would use TRUE instead of FALSE here...
         mLayout->appear();
     }
 

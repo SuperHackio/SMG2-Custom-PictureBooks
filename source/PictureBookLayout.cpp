@@ -3,6 +3,7 @@
 #include "OtherUtils.h"
 
 namespace {
+    const s32 cMaxPagePerChapter = 100;
     const s32 cBookOpenFrame = 60;
     // const s32 cBookCloseFrame
     const s32 cFadeFrame = 60;
@@ -11,63 +12,6 @@ namespace {
     // const s32 cReadedSpeedRate
     const s32 cPageNextEndNormalSeStep = 81;
     const s32 cPageNextEndFastSeStep = 27;
-    const char* cContentsPaneName[] = {
-        "Chapter1",
-        "Chapter2",
-        "Chapter3",
-        "Chapter4",
-        "Chapter5",
-        "Chapter6",
-        "Chapter7",
-        "Chapter8",
-        "Chapter9",
-    };
-    const char* cContentsPointingPaneName[] = {
-        "BoxButton1",
-        "BoxButton2",
-        "BoxButton3",
-        "BoxButton4",
-        "BoxButton5",
-        "BoxButton6",
-        "BoxButton7",
-        "BoxButton8",
-        "BoxButton9",
-    };
-
-    s32 getTextureNum(s32 chapterNo) {
-        s32 textureNo = 0;
-
-        char chapterArcName[64];
-        snprintf(chapterArcName, sizeof(chapterArcName), "PictureBookChapter%d.arc", chapterNo);
-
-        for (;;) {
-            char pageTexName[64];
-            snprintf(pageTexName, sizeof(pageTexName), "Chapter%dPage%d.bti", chapterNo, textureNo + 1);
-
-            if (!MR::isExistResourceInArc(chapterArcName, pageTexName)) {
-                break;
-            }
-
-            textureNo++;
-        }
-
-        return textureNo;
-    }
-
-    s32 getPageNum(s32 chapterNo) {
-        for (s32 pageNo = 0; pageNo < 100; pageNo++) {
-            char messageId[64];
-            snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Page%d_%03d", chapterNo, pageNo + 1, 0);
-
-            if (MR::isExistGameMessage(messageId)) {
-                continue;
-            }
-
-            return pageNo;
-        }
-
-        return 1;
-    }
 
     void openWithTurn(IconAButton* pAButton) {
         pAButton->appear();
@@ -108,57 +52,171 @@ namespace {
 
         MR::setTextBoxMessageRecursive(pBookLayout, pPaneName, pMsg);
     }
+
+    bool isOpenChapter(s32 chapterNo) {
+        bool GLEResult = true;
+#if GALAXY_LEVEL_ENGINE
+        // TODO
+#endif // GALAXY_LEVEL_ENGINE
+        bool SuperFlagResult = true;
+#if SuperFlag
+        // TODO: SuperFlag doesn't actually allow it being optional. Gotta talk to TMC about that...
+#endif // SuperFlag
+        return GLEResult && SuperFlagResult;
+    }
+
+    bool isReadChapter(s32 chapterNo) {
+        return true;
+    }
 }
 
-PictureBookLayout::PictureBookLayout(s32 chapterMin, s32 chapterMax, bool isRosettaReading) :
+PictureBookLayout::PictureBookLayout(const JMapInfo* pBgmInfo) :
     LayoutActor("絵本レイアウト", true),
-    mChapterMin(chapterMin),
-    mChapterMax(chapterMax),
-    mChapterRosettaMax(chapterMax),
+    mBgmInfo(pBgmInfo),
+    mLayoutName(nullptr),
+    mChapterLayoutButtonNum(0),
+    mChapterUnlockFlags(nullptr),
+    mChapterReadFlags(nullptr),
+    mChapterMax(1),
+    mChapterMin(1),
     mChapterNo(1),
     mPageNo(0),
     mTextIndex(0),
     mNotReadedChapterNo(-1),
     mNotReadedPageNo(-1),
     mNotReadedTextIndex(-1),
-    _44(nullptr),
-    _48(nullptr),
     mTitleTexMap(nullptr),
     mCoverFrontTexMap(nullptr),
     mCoverBackTexMap(nullptr),
+    mAllPageTextureStorage(nullptr),
+    mChapterPageTextureStorage(nullptr),
     mNextItemDir(1),
     mIsNextItemFast(false),
+    mIsAutoPlay(false),
     mIconAButton(nullptr),
     mContentsButtonPaneController(nullptr),
     mCloseButton(nullptr)
 {
-    if (!isRosettaReading) {
-        mContentsButtonPaneController = new ButtonPaneController*[getChapterMax()];
-    }
 }
 
-void PictureBookLayout::init(const JMapInfoIter& rIter) {
-    initLayoutManagerWithTextBoxBufferLength("PictureBook", 512, 1);
+void PictureBookLayout::initBookInfo(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo) {
+    initLayoutManagerWithTextBoxBufferLength(pLayoutName, 512, 1);
     MR::createAndAddPaneCtrl(this, "AButtonPosition", 1);
     MR::createAndAddPaneCtrl(this, "Text", 1);
     MR::connectToSceneLayout(this);
-    initTexture();
-
     mIconAButton = MR::createAndSetupIconAButton(this, true, false);
 
-    if (mContentsButtonPaneController != nullptr) {
-        initContentsButton();
+    mChapterMax = MR::getCsvDataElementNum(pBookInfo);
+    mChapterUnlockFlags = new bool[mChapterMax];
+    mChapterReadFlags = new bool[mChapterMax];
 
-        mCloseButton = new PictureBookCloseButton(true);
-        mCloseButton->initWithoutIter();
-    }
+    initTexture(pTextureName, pLayoutName, pBookInfo);
+
+
+    char buttonPaneName[0x20];
+    bool isPaneExist = true;
+    do {
+        snprintf(buttonPaneName, 0x20, "Chapter%d", ++mChapterLayoutButtonNum);
+        isPaneExist = _mManager->findPaneByName(buttonPaneName);
+    } while (isPaneExist);
+    mChapterLayoutButtonNum--; // subtract one because this is calculated starting at 1, not 0
+    OSReport("Layout chapter button count: %d\n", mChapterLayoutButtonNum);
+    mContentsButtonPaneController = new ButtonPaneController * [mChapterLayoutButtonNum];
+    initContentsButton(pLayoutName);
+    mCloseButton = new PictureBookCloseButton(true);
+    mCloseButton->initWithoutIter();
+
 
     initNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeIn::sInstance);
 }
 
+void PictureBookLayout::initTexture(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo) {
+    // Load the base book textures
+    char arcNameBuffer[0x40];
+    snprintf(arcNameBuffer, 0x40, "%sTexture.arc", pTextureName);
+    char tempBtiNameBuffer[0x40];
+    snprintf(tempBtiNameBuffer, 0x40, "%sTitle.bti", pTextureName);
+    mTitleTexMap = MR::createLytTexMap(arcNameBuffer, tempBtiNameBuffer);
+    snprintf(tempBtiNameBuffer, 0x40, "%sCoverFront.bti", pTextureName);
+    mCoverFrontTexMap = MR::createLytTexMap(arcNameBuffer, tempBtiNameBuffer);
+    snprintf(tempBtiNameBuffer, 0x40, "%sCoverBack.bti", pTextureName);
+    mCoverBackTexMap = MR::createLytTexMap(arcNameBuffer, tempBtiNameBuffer);
+
+    // Load the chapter page images
+    mAllPageTextureStorage = new PictureBookChapterTexEntry[mChapterMax];
+    for (s32 i = 0; i < mChapterMax; i++) {
+        const char* pArchiveName;
+        MR::getCsvDataStrOrNULL(&pArchiveName, pBookInfo, "Name", i);
+
+        ResourceHolder* pResourceHolder = MR::createAndAddResourceHolder(pArchiveName);
+        s32 texcount = pResourceHolder->mFileInfoTable->mResCount;
+        mAllPageTextureStorage[i].mCount = texcount;
+        mAllPageTextureStorage[i].mTex = new PictureBookPageTexEntry[texcount];
+        for (s32 j = 0; j < texcount; j++) {
+            char imagename[64];
+            snprintf(imagename, 64, "Chapter%dPage%d.bti", i + 1, j + 1);
+
+            if (!pResourceHolder->mFileInfoTable->isExistRes(imagename)){
+                mAllPageTextureStorage[i].mTex[j].mName = "";
+                mAllPageTextureStorage[i].mTex[j].mTexture = mTitleTexMap; // Backup image... Or maybe you just want text idk
+                OSReport("Could not load %s\n", imagename);
+                continue;
+            }
+
+            s32 len = strlen(imagename)+1;
+            char* copyimagename = new char[len]; // have to leave this memory hanging
+            MR::copyString(copyimagename, imagename, len);
+            mAllPageTextureStorage[i].mTex[j].mName = copyimagename;
+            mAllPageTextureStorage[i].mTex[j].mTexture = MR::createLytTexMap(pArchiveName, copyimagename);
+            OSReport("Loaded %s\n", copyimagename);
+        }
+    }
+}
+
+void PictureBookLayout::initContentsButton(const char* pLayoutName) {
+    for (s32 i = 0; i < mChapterLayoutButtonNum; i++) {
+        // We never need these again after this, but they must persist in memory as the ButtonPaneController does not create a copy of them.
+        // We'll float them in the current heap and pray that doesn't cause problems...
+        char* contentsPaneName = new char[64];
+        char* contentsPointingPaneName = new char[64];
+        snprintf(contentsPaneName, 64, "Chapter%d", i + 1);
+        snprintf(contentsPointingPaneName, 64, "BoxButton%d", i + 1);
+        mContentsButtonPaneController[i] = new ButtonPaneController(this, contentsPaneName, contentsPointingPaneName, 0, false);
+        // mContentsButtonPaneController[i]->invalidateAppearance();    Seems like nothing strange happens when this is not on, so...
+
+        char messageId[64];
+        snprintf(messageId, 64, "%sChapter%d_Title", pLayoutName, i + 1);
+        wchar_t defaultmsg[64]; // The game will make a copy of this, so no need to float it like the above strings thankfully...
+        swprintf(defaultmsg, 64, L"Chapter %d\n-Untitled-", i + 1);
+        setTextOrDefault(this, contentsPaneName, messageId, defaultmsg);
+    }
+    mLayoutName = pLayoutName;
+}
+
+// ===============================================================
+
+void PictureBookLayout::prepare(bool autoplay, const JMapInfo* pBookInfo) {
+    // Prepare the picture book to be opened
+    // This handles unlocking chapters, which chapters have been read already, and which chapters should be shown when autoplay is used
+    // Call this before calling appear
+
+    mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been ready before, according to the flags. Fix this!
+    mChapterNo = 0;
+    for (s32 i = 0; i < mChapterMax; i++) {
+        mChapterUnlockFlags[i] = isOpenChapter(i+1);
+        mChapterReadFlags[i] = isReadChapter(i+1);
+
+        if (mChapterReadFlags[i])
+            continue;
+
+        if (mChapterNo <= 0)
+            mChapterNo = i + 1; // Starting point for AutoPlay
+    }
+    if (mIsAutoPlay && mChapterNo <= 0)
+        mChapterNo = 1; // default to the first chapter if all have been read already. Technically this is just a failsafe...
+}
+
 void PictureBookLayout::appear() {
-    mChapterNo = mChapterMin;
-    mChapterMax = getChapterNumberMax();
     mPageNo = 0;
     mTextIndex = 0;
     mNotReadedChapterNo = -1;
@@ -167,21 +225,16 @@ void PictureBookLayout::appear() {
     mNextItemDir = 1;
     mIsNextItemFast = false;
 
-    if (mContentsButtonPaneController == nullptr) {
+    if (mIsAutoPlay) {
         MR::hidePaneRecursive(this, "Contents");
-    }
-    else {
-        hideContents();
-    }
-
-    LayoutActor::appear();
-
-    if (mContentsButtonPaneController == nullptr) {
         setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeIn::sInstance);
     }
     else {
+        hideContents();
         setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvOpen::sInstance);
     }
+
+    LayoutActor::appear();
 
     MR::requestMovementOn(this);
     MR::requestMovementOn(mIconAButton);
@@ -193,7 +246,7 @@ void PictureBookLayout::kill() {
     LayoutActor::kill();
     mIconAButton->kill();
 
-    if (mContentsButtonPaneController != nullptr) {
+    if (!mIsAutoPlay) {
         mCloseButton->kill();
     }
 
@@ -202,83 +255,32 @@ void PictureBookLayout::kill() {
     MR::activateGameSceneDraw3D();
 }
 
-s32 PictureBookLayout::getChapterMax() {
-    return 9;
-}
-
 void PictureBookLayout::control() {
-    if (mContentsButtonPaneController == nullptr) {
+    if (mIsAutoPlay) {
         return;
     }
 
-    for (s32 i = 0; i < getChapterMax(); i++) {
+    for (s32 i = 0; i < mChapterLayoutButtonNum; i++) {
         mContentsButtonPaneController[i]->update();
     }
 }
 
-void PictureBookLayout::initTexture() {
-    s32 textureNum = 0;
-
-    for (s32 c = mChapterMin; c <= mChapterMax; c++) {
-        textureNum += getTextureNum(c);
-    }
-
-    _44 = new nw4r::lyt::TexMap*[textureNum];
-
-    s32 textureIndex = 0;
-
-    for (s32 c = mChapterMin; c <= mChapterMax; c++) {
-        char chapterArcName[64];
-        snprintf(chapterArcName, sizeof(chapterArcName), "PictureBookChapter%d.arc", c);
-
-        for (s32 p = 0; p < getTextureNum(c); p++) {
-            char pageTexName[64];
-            snprintf(pageTexName, sizeof(pageTexName), "Chapter%dPage%d.bti", c, p + 1);
-
-            _44[textureIndex] = MR::createLytTexMap(chapterArcName, pageTexName);
-            textureIndex++;
-            // OSReport("%s\n", pageTexName);
-        }
-    }
-
-    mTitleTexMap = MR::createLytTexMap("PictureBookTexture.arc", "PictureBookTitle.bti");
-    mCoverFrontTexMap = MR::createLytTexMap("PictureBookTexture.arc", "PictureBookCoverFront.bti");
-    mCoverBackTexMap = MR::createLytTexMap("PictureBookTexture.arc", "PictureBookCoverBack.bti");
-}
-
-void PictureBookLayout::initContentsButton() {
-    char messageId[64];
-
-    for (s32 i = 0; i < getChapterMax(); i++) {
-        /* char contentsPaneName[64];
-        char contentsPointingPaneName[64];
-        snprintf(contentsPaneName, sizeof(contentsPaneName), "Chapter%d", i + 1);
-        snprintf(contentsPointingPaneName, sizeof(contentsPointingPaneName), "BoxButton%d", i + 1); */
-        mContentsButtonPaneController[i] = new ButtonPaneController(this, cContentsPaneName[i], cContentsPointingPaneName[i], 0, false);
-        OSReport(cContentsPaneName[i]);
-        OSReport("\n");
-        // mContentsButtonPaneController[i]->invalidateAppearance();    Seems like nothing strange happens when this is not on, so...
-
-        snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Title", i + 1);
-        setTextOrDefault(this, cContentsPaneName[i], messageId, L"Untitled Chapter");
-    }
-}
 
 bool PictureBookLayout::updateText() {
     char messageId[64];
 
     if (mPageNo == 0) {
         
-        snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Title", mChapterNo);
+        snprintf(messageId, sizeof(messageId), "%sChapter%d_Title", mLayoutName, mChapterNo);
         setTextOrDefault(this, "Title", messageId, L"- Untitled Chapter -");
 
         return true;
     }
     else {
-        snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Page%d_%03d", mChapterNo, mPageNo, mTextIndex);
+        snprintf(messageId, sizeof(messageId), "%sChapter%d_Page%d_%03d", mLayoutName, mChapterNo, mPageNo, mTextIndex);
 
         if (MR::isExistGameMessage(messageId)) {
-            setTextOrDefault(this, "Text", messageId, L"[...]");
+            setTextOrDefault(this, "Text", messageId, L"[...]"); // just in case...
 
             return true;
         }
@@ -289,7 +291,8 @@ bool PictureBookLayout::updateText() {
 
 void PictureBookLayout::updateTexture() {
     s32 textureNum = getTextureNum(mChapterNo);
-    s32 pageNo;
+    s32 pageNo = mPageNo;
+    OSReport("updatetexture ChapterNo PageNo NextItemDir TextureNum: %d, %d, %d, %d\n", mChapterNo, mPageNo, mNextItemDir, textureNum);
 
     if (mNextItemDir > 0) {
         pageNo = mPageNo - 1;
@@ -307,7 +310,7 @@ void PictureBookLayout::updateTexture() {
     else {
         s32 texMapIndex = textureNum + pageNo - 1;
         s32 ind = texMapIndex % textureNum + 1;
-        nw4r::lyt::TexMap* pTexMap = _48[ind-1];
+        nw4r::lyt::TexMap* pTexMap = mChapterPageTextureStorage[ind-1].mTexture;
 
         MR::replacePaneTexture(this, "PicLeftPage", pTexMap, 0);
         MR::replacePaneTexture(this, "PicTurnRightPage", pTexMap, 0);
@@ -329,11 +332,37 @@ void PictureBookLayout::updateTexture() {
     else {
         s32 texMapIndex = textureNum + pageNo - 1;
         s32 ind = texMapIndex % textureNum + 1;
-        nw4r::lyt::TexMap* pTexMap = _48[ind-1];
+        nw4r::lyt::TexMap* pTexMap = mChapterPageTextureStorage[ind-1].mTexture;
         
         MR::replacePaneTexture(this, "PicRightPage", pTexMap, 0);
         MR::replacePaneTexture(this, "PicTurnLeftPage", pTexMap, 0);
     }
+}
+
+void PictureBookLayout::updateBgm() {
+    if (mBgmInfo == nullptr)
+        return;
+
+    // TODO
+}
+
+s32 PictureBookLayout::getTextureNum(s32 chapterNo) const {
+    return mAllPageTextureStorage[chapterNo-1].mCount;
+}
+
+s32 PictureBookLayout::getPageNum(s32 chapterNo) const {
+    for (s32 pageNo = 0; pageNo < cMaxPagePerChapter; pageNo++) {
+        char messageId[64];
+        snprintf(messageId, sizeof(messageId), "%sChapter%d_Page%d_%03d", mLayoutName, chapterNo, pageNo + 1, 0);
+
+        if (MR::isExistGameMessage(messageId)) {
+            continue;
+        }
+
+        return pageNo;
+    }
+
+    return 1; // minimum 1 because of the title, which always exists
 }
 
 bool PictureBookLayout::textNext() {
@@ -389,15 +418,13 @@ bool PictureBookLayout::chapterNext() {
 }
 
 void PictureBookLayout::updateTexMapChapterBase() {
-    _48 = _44;
-
-    for (s32 c = mChapterMin; c <= mChapterMax; c++) {
-        if (c == mChapterNo) {
-            break;
-        }
-
-        _48 = &_48[getTextureNum(c)];
+    if (mChapterNo == 0) {
+        mChapterPageTextureStorage = nullptr;
+        return;
     }
+
+    mChapterPageTextureStorage = mAllPageTextureStorage[mChapterNo-1].mTex;
+    OSReport("Registered tex for chapter %d\n", mChapterNo-1);
 }
 
 bool PictureBookLayout::isReadedCurrentText() const {
@@ -437,7 +464,7 @@ bool PictureBookLayout::isReadedCurrentText() const {
 }
 
 s32 PictureBookLayout::getReadSpeed() const {
-    bool b = mContentsButtonPaneController != nullptr || mIsNextItemFast;
+    bool b = !mIsAutoPlay || mIsNextItemFast;
 
     if (b) {
         return 3;
@@ -447,7 +474,7 @@ s32 PictureBookLayout::getReadSpeed() const {
     }
 }
 
-bool PictureBookLayout::isBookEndCurrentText() const {
+bool PictureBookLayout::isBookEndCurrentText() const { // TODO: Rewrite this?
     bool r31 = false;
     bool r30 = false;
 
@@ -471,14 +498,24 @@ void PictureBookLayout::setTextAlpha(f32 alpha) {
 }
 
 s32 PictureBookLayout::getChapterNumberMax() const {
-    if (mContentsButtonPaneController == nullptr) {
-        return mChapterRosettaMax;
+    // Count how many chapters are unlocked
+    s32 numchaptersunlock = 0;
+    s32 numchaptersread = 0;
+    for (s32 i = 0; i < mChapterMax; i++) {
+        if (mChapterUnlockFlags[i])
+            numchaptersunlock++;
+
+        if (mChapterReadFlags[i])
+            numchaptersread++;
     }
-    return 9; // return MR::getPictureBookChapterAlreadyRead();     GameFlag function, needs to be replaced
+
+    if (mIsAutoPlay)
+        return numchaptersunlock - numchaptersread; // "Rosalina" will read all new chapters
+    return numchaptersunlock;
 }
 
 bool PictureBookLayout::isValidCloseButton() const {
-    if (mContentsButtonPaneController == nullptr) {
+    if (mIsAutoPlay) {
         return false;
     }
 
@@ -501,7 +538,7 @@ s32 PictureBookLayout::getCurrentMaxTextIndex() const {
 
     for (s32 i = 0; i < 100; i++) {
         char messageId[64];
-        snprintf(messageId, sizeof(messageId), "PictureBookChapter%d_Page%d_%03d", chapterNo, pageNo, i);
+        snprintf(messageId, sizeof(messageId), "%sChapter%d_Page%d_%03d", mLayoutName, chapterNo, pageNo, i);
 
         if (MR::isExistGameMessage(messageId)) {
             continue;
@@ -512,6 +549,59 @@ s32 PictureBookLayout::getCurrentMaxTextIndex() const {
 
     return 0;
 }
+
+void PictureBookLayout::hideContents() {
+    for (s32 i = 0; i < mChapterLayoutButtonNum; i++) {
+        mContentsButtonPaneController[i]->forceToHide();
+    }
+}
+
+f32 PictureBookLayout::getFadeInAlphaTextBG(f32 alpha) const {
+    bool var;
+    if (!mPageNo || isBookEndCurrentText()) {
+        return 0.0f;
+    }
+    var = false;
+    if (mNextItemDir > 0) {
+        if (!mTextIndex) {
+            var = true;
+        }
+    }
+    else if (getCurrentMaxTextIndex() == mTextIndex) {
+        if (mPageNo < getTextureNum(mChapterNo)) {
+            var = true;
+        }
+    }
+    if (var) {
+        return alpha;
+    }
+    return 1.0f;
+}
+
+f32 PictureBookLayout::getFadeOutAlphaTextBG(f32 alpha) const {
+    bool var;
+    if (!mPageNo || isBookEndCurrentText()) {
+        return 0.0f;
+    }
+    var = false;
+    if (mNextItemDir > 0) {
+         if (getCurrentMaxTextIndex() == mTextIndex) {
+            if (mPageNo < getTextureNum(mChapterNo)) {
+                var = true;
+            }
+        }
+    }
+    else if(mTextIndex == 0 && mPageNo > 0){
+        var = true;
+    }
+    if (var) {
+        return alpha;
+    }
+    return 1.0f;
+}
+
+
+
 
 void PictureBookLayout::exeOpen() {
     nw4r::lyt::TexMap* pTexMap;
@@ -542,7 +632,7 @@ void PictureBookLayout::exeOpen() {
     }
 
     // s32 animFrameMax = MR::getAnimFrameMax(this, (u32)0);    // The game does not read this right and it just returns 0
-    s32 animFrameMax = 160;  
+    s32 animFrameMax = 160;
     s32 stepMin = animFrameMax + cBookOpenFrame;
     s32 stepMax = stepMin + cFadeTextFrame;
 
@@ -650,7 +740,9 @@ void PictureBookLayout::exeFadeIn() {
         f32 animFrame;
 
         if (mNextItemDir > 0) {
-            animFrame = 60; // = MR::getAnimFrameMax(this, (u32)0);
+            animFrame = MR::getAnimFrameMax(this, (u32)0);
+            OSReport("AnimFrameMax: PageNext %ff\n", animFrame);
+            animFrame = 60;
         }
         else {
             animFrame = 0.0f;
@@ -670,7 +762,7 @@ void PictureBookLayout::exeFadeIn() {
 }
 
 void PictureBookLayout::exeWaitNoText() {
-    bool b = mContentsButtonPaneController != nullptr || mIsNextItemFast;
+    bool b = !mIsAutoPlay || mIsNextItemFast;
 
     MR::setNerveAtStep(this, &NrvPictureBookLayout::PictureBookLayoutNrvFadeInText::sInstance, b ? 0 : cWaitNoTextFrame);
 }
@@ -680,7 +772,7 @@ void PictureBookLayout::exeFadeInText() {
         if (mPageNo == 0) {
             MR::showPaneRecursive(this, "Title");
 
-            if (mContentsButtonPaneController != nullptr) {
+            if (!mIsAutoPlay) {
                 mCloseButton->appear();
             }
         }
@@ -740,9 +832,8 @@ void PictureBookLayout::exeWaitWithText() {
         setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOutText::sInstance);
     }
     else {
-        bool isTriggerNextPage = MR::testCorePadTriggerA(0)
-            || MR::testCorePadTriggerRight(0)
-            || MR::testSubPadStickTriggerRight(0);
+        // TODO: rewrite so that chapters that are locked are skipped
+        bool isTriggerNextPage = MR::testCorePadTriggerA(0) || MR::testCorePadTriggerRight(0) || MR::testSubPadStickTriggerRight(0);
 
         if (isTriggerNextPage) {
             MR::startSystemSE("SE_SY_TALK_FOCUS_ITEM", -1, -1);
@@ -762,8 +853,7 @@ void PictureBookLayout::exeWaitWithText() {
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOutText::sInstance);
         }
         else {
-            bool isTriggerPrevPage = MR::testCorePadTriggerLeft(0)
-                || MR::testSubPadStickTriggerLeft(0);
+            bool isTriggerPrevPage = MR::testCorePadTriggerLeft(0) || MR::testSubPadStickTriggerLeft(0);
 
             if (isTriggerPrevPage) {
                 if (mChapterMin < mChapterNo || mPageNo > 0 || mTextIndex > 0) {
@@ -818,7 +908,7 @@ void PictureBookLayout::exeFadeOutText() {
             }
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOut::sInstance);
         }
-        else if (mContentsButtonPaneController == nullptr) {
+        else if (mIsAutoPlay) {
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOut::sInstance);
         }
         else {
@@ -867,7 +957,7 @@ void PictureBookLayout::exeFadeOut() {
     if (MR::isFirstStep(this)) {
         MR::closeWipeFade(cFadeFrame / getReadSpeed());
 
-        if (mContentsButtonPaneController == nullptr) {
+        if (mIsAutoPlay) {
             MR::stopStageBGM(cFadeFrame / getReadSpeed());
         }
     }
@@ -899,7 +989,10 @@ void PictureBookLayout::exeClose() {
             MR::replacePaneTexture(this, "PicLeftPage", pTexMap, 0);
             MR::replacePaneTexture(this, "PicTurnRightPage", pTexMap, 0);
         } else {
-            pTexMap = _48[mPageNo - 2];
+            if ((mPageNo - 2) < 0)
+                pTexMap = mTitleTexMap;
+            else
+                pTexMap = mChapterPageTextureStorage[mPageNo - 2].mTexture;
 
             MR::replacePaneTexture(this, "PicLeftPage", pTexMap, 0);
             MR::replacePaneTexture(this, "PicTurnRightPage", pTexMap, 0);
@@ -928,54 +1021,4 @@ void PictureBookLayout::exeClose() {
             kill();
         }
     }
-}
-
-void PictureBookLayout::hideContents() {
-    for (s32 i = 0; i < getChapterMax(); i++) {
-        mContentsButtonPaneController[i]->forceToHide();
-    }
-}
-
-f32 PictureBookLayout::getFadeInAlphaTextBG(f32 alpha) const {
-    bool var;
-    if (!mPageNo || isBookEndCurrentText()) {
-        return 0.0f;
-    }
-    var = false;
-    if (mNextItemDir > 0) {
-        if (!mTextIndex) {
-            var = true;
-        }
-    }
-    else if (getCurrentMaxTextIndex() == mTextIndex) {
-        if (mPageNo < getTextureNum(mChapterNo)) {
-            var = true;
-        }
-    }
-    if (var) {
-        return alpha;
-    }
-    return 1.0f;
-}
-
-f32 PictureBookLayout::getFadeOutAlphaTextBG(f32 alpha) const {
-    bool var;
-    if (!mPageNo || isBookEndCurrentText()) {
-        return 0.0f;
-    }
-    var = false;
-    if (mNextItemDir > 0) {
-         if (getCurrentMaxTextIndex() == mTextIndex) {
-            if (mPageNo < getTextureNum(mChapterNo)) {
-                var = true;
-            }
-        }
-    }
-    else if(mTextIndex == 0 && mPageNo > 0){
-        var = true;
-    }
-    if (var) {
-        return alpha;
-    }
-    return 1.0f;
 }

@@ -7,7 +7,7 @@ class ButtonPaneController;
 class PictureBookCloseButton : public LayoutActor {
 public:
     /// @brief Creates a new `PictureBookCloseButton`.
-    PictureBookCloseButton(bool);
+    PictureBookCloseButton(bool canCloseWithPad);
 
     virtual void init(const JMapInfoIter& rIter);
     virtual void appear();

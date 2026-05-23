@@ -2,7 +2,8 @@
   "Name": "Custom Storybooks",
   "Author": "Aba Gamer",
   "Description": "SMG1 port: PictureBook",
-  "InstallDependencies": ["Syati_ObjectFactories"],
+  "InstallDependencies": [ "Syati_ObjectFactories" ],
+  "SupportedGames" : [ "SB4" ],
   "BuildTasks": [{
     "Task": "Copy",
     "From": "disc/",
