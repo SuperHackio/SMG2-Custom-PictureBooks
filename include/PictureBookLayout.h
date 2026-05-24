@@ -13,25 +13,38 @@ namespace nw4r {
 
 class ButtonPaneController;
 class IconAButton;
-class NameObjArchiveListCollector;
 class PictureBookCloseButton;
+
+struct PictureBookPageTexEntry {
+public:
+    const char* mName;
+    nw4r::lyt::TexMap* mTexture;
+};
+struct PictureBookChapterTexEntry {
+public:
+    PictureBookPageTexEntry* mTex;
+    s32 mCount;
+};
 
 class PictureBookLayout : public LayoutActor {
 public:
-    PictureBookLayout(s32 chapterMin, s32 chapterMax, bool isRosettaReading);
+    PictureBookLayout(const JMapInfo*);
 
-    virtual void init(const JMapInfoIter& rIter);
     virtual void appear();
     virtual void kill();
     virtual void control();
 
-    static void makeArchiveList(NameObjArchiveListCollector* pCollector, s32 chapterMin, s32 chapterMax, bool isRosettaReading);
-    static s32 getChapterMax();
+    void initBookInfo(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo);
+    void initTexture(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo);
+    void initContentsButton(const char* pLayoutName);
+    void prepare(bool autoplay, const JMapInfo* pBookInfo);
 
-    void initTexture();
-    void initContentsButton();
     bool updateText();
     void updateTexture();
+    void updateBgm();
+    s32 getTextureNum(s32 chapterNo) const;
+    s32 getPageNum(s32 chapterNo) const;
+
     bool textNext();
     bool pageNext();
     bool chapterNext();
@@ -60,23 +73,28 @@ public:
     f32 getFadeOutAlphaTextBG(f32 alpha) const;
 
 private:
-    /* 0x20 */ s32 mChapterMin;
-    /* 0x24 */ s32 mChapterMax;
-    /* 0x28 */ s32 mChapterRosettaMax;
-    /* 0x2C */ s32 mChapterNo;
-    /* 0x30 */ s32 mPageNo;
-    /* 0x34 */ s32 mTextIndex;
-    /* 0x38 */ s32 mNotReadedChapterNo;
-    /* 0x3C */ s32 mNotReadedPageNo;
-    /* 0x40 */ s32 mNotReadedTextIndex;
-    /* 0x44 */ nw4r::lyt::TexMap** _44;
-    /* 0x48 */ nw4r::lyt::TexMap** _48;
-    /* 0x4C */ nw4r::lyt::TexMap* mTitleTexMap;
-    /* 0x50 */ nw4r::lyt::TexMap* mCoverFrontTexMap;
-    /* 0x54 */ nw4r::lyt::TexMap* mCoverBackTexMap;
-    /* 0x58 */ s32 mNextItemDir;
-    /* 0x5C */ bool mIsNextItemFast;
-    /* 0x60 */ IconAButton* mIconAButton;
-    /* 0x64 */ ButtonPaneController** mContentsButtonPaneController;
-    /* 0x68 */ PictureBookCloseButton* mCloseButton;
+    const JMapInfo* mBgmInfo;
+    const char* mLayoutName; // Used to create unique MSBT labels
+    s32 mChapterLayoutButtonNum; // The maximum number of chapters the layout supports. Calculated at runtime.
+    bool* mChapterUnlockFlags; // Determine if a chapter is unlocked or not
+    bool* mChapterReadFlags; // Determine if a chapter is already read
+    s32 mChapterMax; // The max number of chapters in this book
+    s32 mChapterMin; // This variable will be refractored out later
+    s32 mChapterNo;
+    s32 mPageNo;
+    s32 mTextIndex;
+    s32 mNotReadedChapterNo;
+    s32 mNotReadedPageNo;
+    s32 mNotReadedTextIndex;
+    nw4r::lyt::TexMap* mTitleTexMap;
+    nw4r::lyt::TexMap* mCoverFrontTexMap;
+    nw4r::lyt::TexMap* mCoverBackTexMap;
+    PictureBookChapterTexEntry* mAllPageTextureStorage;
+    PictureBookPageTexEntry* mChapterPageTextureStorage;
+    s32 mNextItemDir;
+    bool mIsNextItemFast;
+    bool mIsAutoPlay;
+    IconAButton* mIconAButton;
+    ButtonPaneController** mContentsButtonPaneController;
+    PictureBookCloseButton* mCloseButton;
 };

@@ -20,30 +20,52 @@ namespace NrvRosettaPictureBook {
     FULL_NERVE(HostTypeNrvFadeIn, RosettaPictureBook, FadeIn);
 };
 
-RosettaPictureBook::RosettaPictureBook(const char* pName)
-    : LiveActor(pName), mLayout(nullptr), mIconAButton(nullptr), mIsValidOpenIconAButton(false) {}
+RosettaPictureBook::RosettaPictureBook(const char* pName) : LiveActor(pName), mLayout(nullptr), mIconAButton(nullptr), mIsValidOpenIconAButton(false) {}
 
 void RosettaPictureBook::init(const JMapInfoIter& rIter) {
-    MR::initDefaultPos(this, rIter);
-    initModelManagerWithAnm("RosettaPictureBook", nullptr, nullptr, false);
-    MR::connectToSceneMapObj(this);
-    initHitSensor(1);
-    MR::addHitSensorMapObjSimple(this, "body", 8, 150.0f, TVec3f(0.0f, 0.0f, 0.0f));
+    MR::processInitFunction(this, rIter, false);
 
-    mLayout = new PictureBookLayout(1, MR::getPictureBookChapterCanRead(), false);
-    mLayout->initWithoutIter();
+    const char* mObjectName;
+    MR::getObjectName(&mObjectName, rIter);
+    JMapInfo* InitActor = MR::createInitActorCsvParser(mObjectName, NULL);
+    if (InitActor == NULL) { // This should not happen
+        OSReport("%s.arc - InitActor.bcsv not found.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+    if (!MR::hasCsvDataItem(InitActor, "InitFunction", "Texture")) { // This setting is mandatory
+        OSReport("%s.arc - Texture not assigned.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+    const char* pBookTextureName;
+    MR::getCsvDataStrByElement(&pBookTextureName, InitActor, "InitFunction", "Texture", "Data");
+    const char* pLayoutOverride = "PictureBook"; // Default value
+    if (MR::hasCsvDataItem(InitActor, "InitFunction", "Layout"))
+        MR::getCsvDataStrByElement(&pLayoutOverride, InitActor, "InitFunction", "Layout", "Data");
+
+
+    mBookInfo = MR::tryCreateCsvParser(mObjectName, "InitBook.bcsv");
+    if (mBookInfo == nullptr) {
+        OSReport("%s.arc - InitBook.bcsv not found.\n", mObjectName);
+        makeActorDead();
+        return;
+    }
+
+    mLayout = new PictureBookLayout(MR::tryCreateCsvParser(mObjectName, "InitBgmBook.bcsv")); // Set the bool to TRUE to auto read, false for Chapter Select. Make this depend on new unlocks?
+    mLayout->initBookInfo(pBookTextureName, pLayoutOverride, mBookInfo);
 
     mIconAButton = new IconAButton(true, false);
     mIconAButton->initWithoutIter();
 
     initNerve(&NrvRosettaPictureBook::HostTypeNrvWait::sInstance, 0);
     MR::tryRegisterDemoCast(this, rIter);
+
     makeActorAppeared();
 }
 
 void RosettaPictureBook::appear() {
     mIsValidOpenIconAButton = false;
-
     setNerve(&NrvRosettaPictureBook::HostTypeNrvWait::sInstance);
     LiveActor::appear();
 }
@@ -62,6 +84,7 @@ void RosettaPictureBook::attackSensor(HitSensor* pSender, HitSensor* pReceiver) 
         mIsValidOpenIconAButton = true;
     }
 }
+
 
 void RosettaPictureBook::exeWait() {
     if (mIsValidOpenIconAButton) {
@@ -85,16 +108,7 @@ void RosettaPictureBook::exeWait() {
         return;
     }
     
-    DemoStartRequestUtil::requestStartDemo(  // Not 100% equal but...    MR::requestStartDemoMarioPuppetableWithoutCinemaFrame(LiveActor*, const char*, const Nerve*, const Nerve*)
-        this,
-        "ロゼッタ絵本デモ",
-        &NrvRosettaPictureBook::HostTypeNrvFadeOut::sInstance,
-        &NrvRosettaPictureBook::HostTypeNrvDemoWait::sInstance,
-        2,
-        DemoStartInfo::DEMOTYPE_0,
-        DemoStartInfo::CINEMAFRAMETYPE_1,
-        DemoStartInfo::STARPOINTERTYPE_0,
-        DemoStartInfo::DELETEEFFECTYPE_0);
+    DemoStartRequestUtil::requestStartDemo(this, "ロゼッタ絵本デモ", &NrvRosettaPictureBook::HostTypeNrvFadeOut::sInstance, &NrvRosettaPictureBook::HostTypeNrvDemoWait::sInstance, 2, DemoStartInfo::DEMOTYPE_0, DemoStartInfo::CINEMAFRAMETYPE_1, DemoStartInfo::STARPOINTERTYPE_0, DemoStartInfo::DELETEEFFECTYPE_0);
 }
 
 void RosettaPictureBook::exeDemoWait() {}
@@ -117,6 +131,7 @@ void RosettaPictureBook::exeFadeOut() {
 
 void RosettaPictureBook::exeReading() {
     if (MR::isFirstStep(this)) {
+        mLayout->prepare(false, mBookInfo); // RosettaReading would use TRUE instead of FALSE here...
         mLayout->appear();
     }
 
