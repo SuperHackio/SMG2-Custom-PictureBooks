@@ -2,6 +2,8 @@
 #include "PictureBookLayout.h"
 #include "OtherUtils.h"
 
+#include "Game/AudioLib/AudWrap.h"
+
 namespace {
     const s32 cMaxPagePerChapter = 100;
     const s32 cBookOpenFrame = 60;
@@ -200,7 +202,7 @@ void PictureBookLayout::prepare(bool autoplay, const JMapInfo* pBookInfo) {
     // This handles unlocking chapters, which chapters have been read already, and which chapters should be shown when autoplay is used
     // Call this before calling appear
 
-    mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been ready before, according to the flags. Fix this!
+    mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been read before, according to the flags. Fix this!
     mChapterNo = 0;
     for (s32 i = 0; i < mChapterMax; i++) {
         mChapterUnlockFlags[i] = isOpenChapter(i+1);
@@ -339,11 +341,83 @@ void PictureBookLayout::updateTexture() {
     }
 }
 
-void PictureBookLayout::updateBgm() {
+extern "C" {
+    void __kAutoMap_80085F70(u32*, AudSoundNameConverter*, const char*);
+}
+
+void PictureBookLayout::updateBgm(s32 chapter, s32 page, s32 textline) {
     if (mBgmInfo == nullptr)
         return;
 
-    // TODO
+    OSReport("BGM: %d %d %d\n", chapter, page, textline);
+    // Track down the BCSV row that corresponds to the chapter page and textline
+    s32 idx = -1;
+    s32 count = MR::getCsvDataElementNum(mBgmInfo);
+    for (s32 i = 0; i < count; i++) {
+        s32 C, P, T;
+        MR::getCsvDataS32(&C, mBgmInfo, "Chapter", i);
+        MR::getCsvDataS32(&P, mBgmInfo, "Page", i);
+        MR::getCsvDataS32(&T, mBgmInfo, "Text", i);
+
+        if (C != chapter && C != -1) // If -1, we ignore it
+            continue;
+
+        if (P != page && P != -1) // If -1, we ignore it
+            continue;
+
+        if (T != textline && T != -1) // If -1, we ignore it
+            continue;
+
+        idx = i;
+        break;
+    }
+
+    if (idx < 0)
+        return; // Return without doing anything...
+
+    // We do need to attempt a music change now
+    const char* pLabel;
+    MR::getCsvDataStrOrNULL(&pLabel, mBgmInfo, "BgmName", idx);
+    s32 state = 0;
+    MR::getCsvDataS32(&state, mBgmInfo, "BgmStateNo", idx);
+    s32 wipeout = 120;
+    s32 statechange = 120;
+    if (MR::hasCsvItem(mBgmInfo, "BgmWipeoutFrame"))
+        MR::getCsvDataS32(&wipeout, mBgmInfo, "BgmWipeoutFrame", idx);
+    if (MR::hasCsvItem(mBgmInfo, "BgmStateFrame"))
+        MR::getCsvDataS32(&statechange, mBgmInfo, "BgmStateFrame", idx);
+    if (wipeout < 0)
+        wipeout = 120;
+    if (statechange < 0)
+        statechange = 120;
+
+    OSReport("%03d: %s @ %d ^ %d (%d)\n", idx, pLabel, state, statechange, wipeout);
+    if (pLabel == nullptr) { // Calling for no BGM
+        MR::stopStageBGM(wipeout);
+    }
+    else { // New BGM will start
+        if (MR::isEqualCurrentStageBgmName(pLabel)) {
+            MR::setStageBGMState(state, statechange);
+            OSReport("Same Song playing\n");
+        }
+        else if (MR::isStopOrFadeoutBgmName(pLabel)) {
+            MR::startStageBGM(pLabel, false);
+            MR::setStageBGMState(state, statechange);
+            OSReport("BGM: IsStopOrFadeOut = TRUE\n");
+        }
+        else {
+            MR::clearBgmQueue();
+            AudSoundNameConverter* psoundconverter = AudSingletonHolder<AudSoundNameConverter>::sInstance;
+            u32 ID;
+            const char* ptemp = pLabel;
+            // The fact that this is REQUIRED is rediclous...
+            __kAutoMap_80085F70(&ID, psoundconverter, pLabel);
+            AudWrap::setNextIdStageBgm(ID);
+            MR::stopStageBGM(wipeout);
+            MR::setStageBGMState(state, statechange);
+            OSReport("BGM: IsStopOrFadeOut = FALSE | isPlayingStageBgmName = FALSE\n");
+        }
+    }
 }
 
 s32 PictureBookLayout::getTextureNum(s32 chapterNo) const {
@@ -621,7 +695,7 @@ void PictureBookLayout::exeOpen() {
         MR::startAnim(this, "Appear", 0);
         MR::setAnimFrameAndStop(this, 0.0f, 0);
         MR::openWipeFade(cFadeFrame);
-        MR::startStageBGM("STM_PROLOGUE_01", false);
+        updateBgm(0, 0, 0); // Chapter 0 page 0 text 0 is the default song
     }
     if (MR::isStep(this, cBookOpenFrame)) {
         MR::setAnimRate(this, 1.0f, 0);
@@ -751,8 +825,8 @@ void PictureBookLayout::exeFadeIn() {
         MR::setAnimFrameAndStop(this, animFrame, 0);
         MR::openWipeFade(cFadeFrame / getReadSpeed());
 
-        if (mContentsButtonPaneController == nullptr) {
-            MR::startStageBGM("STM_PROLOGUE_01", false);
+        if (mIsAutoPlay) {
+            updateBgm(mChapterNo, mPageNo, mTextIndex);
         }
     }
 
@@ -789,7 +863,7 @@ void PictureBookLayout::exeFadeInText() {
             }
         }
 
-        // Here there was a bunch of code for the music on special pages //
+        updateBgm(mChapterNo, mPageNo, mTextIndex);
        
         if (isBookEndCurrentText()) {
             setTextBoxHorizontalPositionRecursive(this, "Text", 1);
@@ -903,9 +977,6 @@ void PictureBookLayout::exeFadeOutText() {
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvPageNext::sInstance);
         }
         else if (chapterNext()) {
-            if (MR::isPlayingStageBgmName("STM_PROLOGUE_01_B")) {
-                MR::stopStageBGM(120);
-            }
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOut::sInstance);
         }
         else if (mIsAutoPlay) {

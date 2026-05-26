@@ -41,7 +41,7 @@ public:
 
     bool updateText();
     void updateTexture();
-    void updateBgm();
+    void updateBgm(s32 chapter, s32 page, s32 textline);
     s32 getTextureNum(s32 chapterNo) const;
     s32 getPageNum(s32 chapterNo) const;
 

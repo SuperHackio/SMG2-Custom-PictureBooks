@@ -33,6 +33,7 @@ private:
 extern "C" {
     StarPointerOnOffController* __kAutoMap_8005BCB0();  // getStarPointerOnOffController()
     GameScene* __kAutoMap_80452A70();   // getGameScene()
+    const char* __kAutoMap_8001B350();
 }
 
 namespace MR {
@@ -97,5 +98,46 @@ namespace MR {
 
         pPaneCtrl->start(pAnimName, animLayer);
         initFrameCtrlReverse(pPaneCtrl->getFrameCtrl(animLayer));
+    }
+
+    bool isEqualCurrentStageBgmName(const char* pLabel) {
+        const char* pCurrent = __kAutoMap_8001B350();
+        if (pCurrent == nullptr && pLabel == nullptr)
+            return true;
+
+        if (pCurrent == nullptr || pLabel == nullptr)
+            return false;
+
+        return MR::isEqualString(pCurrent, pLabel);
+    }
+
+    bool isStopOrFadeoutBgmName(const char* pLabel) {
+        // The original function followed this logic:
+        // Returns TRUE if...
+        //   -> No music is playing
+        //   -> The current song doesn't match the song pLabel represents 
+        //   -> The song handle is NULL
+        //   -> The song handle's 0x30 is NOT equal to 0
+        //   -> The song represented by pLabel is stopping
+        // Returns FALSE otherwise
+
+        register AudBgm* bgm = AudWrap::getStageBgm();
+        if (bgm == nullptr)
+            return true;
+
+        
+        if (!isEqualCurrentStageBgmName(pLabel))
+            return false;
+        
+        register bool isstopping;
+        __asm {
+            mr r3, bgm
+            lwz r12, 0(r3)
+            lwz       r12, 0x44(r12)
+            mtctr     r12
+            bctrl
+            mr isstopping, r3
+        }
+        return isstopping;
     }
 }
