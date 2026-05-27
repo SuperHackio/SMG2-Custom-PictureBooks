@@ -166,7 +166,45 @@ namespace PictureBookDataUtil {
 #ifndef GALAXY_LEVEL_ENGINE
         return true;
 #else
-        // TODO
+        {
+            GLE::RepeatableIter startRange, endRange;
+            char startBuffer[0x20];
+            char endBuffer[0x20];
+            GLE::createRepeatableIter(startRange, "PictureBookName%d");
+            GLE::createRepeatableIter(endRange, "PictureBookChapter%d");
+
+            while (GLE::goNextRepeatableIter(startRange, startBuffer, 0x20, pBCSV)) {
+                if (!GLE::goNextRepeatableIter(endRange, endBuffer, 0x20, pBCSV))
+                    break;
+
+                const char* pName;
+                MR::getCsvDataStrOrNULL(&pName, pBCSV, startBuffer, row);
+                if (pName == nullptr)
+                    continue;
+
+                PictureBookDataStorage* pStorage = getPictureBookDataStorage();
+                s32 idx = -1;
+                for (s32 i = 0; i < pStorage->mDataEntries.size(); i++) {
+                    if (!MR::isEqualString(pName, pStorage->mDataEntries[i]->mName))
+                        continue;
+                    idx = i;
+                    break;
+                }
+                if (idx < 0)
+                    return false; // unable to find save data, so we assume this hasn't been read
+
+                s32 chapter;
+                MR::getCsvDataS32(&chapter, pBCSV, endBuffer, row);
+                if (chapter < 0 || chapter >= 32) // Can't check a non-existant chapter
+                    continue;
+                if (chapter == 0) { // Check if any chapter has been read before
+                    if (!pStorage->mDataEntries[idx]->mChapterReadFlags)
+                        return false;
+                }
+                else if (!isReadChapter(pName, chapter))
+                    return false;
+            }
+        }
         return true;
 #endif // !GALAXY_LEVEL_ENGINE
     }
