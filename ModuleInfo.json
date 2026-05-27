@@ -1,21 +1,40 @@
 {
   "Name": "Custom Storybooks",
-  "Author": "Aba Gamer",
+  "Author": "Aba Gamer, Super Hackio",
   "Description": "SMG1 port: PictureBook",
   "InstallDependencies": [ "Syati_ObjectFactories" ],
-  "SupportedGames" : [ "SB4" ],
-  "BuildTasks": [{
-    "Task": "Copy",
-    "From": "disc/",
-    "To": "../../Output/disc/"
-  }],
-  "ModuleData" : [
+  "SupportedGames": [ "SB4" ],
+  "RequiredAPIs": [ "Syati_ExtGameData_API" ],
+  "OptionalAPIs": [ "GalaxyLevelEngine_API" ],
+  "BuildTasks": [
     {
-      "ProductMapObj" : [
+      "Task": "Copy",
+      "From": "disc/",
+      "To": "../../Output/disc/"
+    }
+  ],
+  "ModuleData": [
+    {
+      "ProductMapObj": [
         {
-          "Name" : "PictureBook",
-          "Function" : "createExtActor<RosettaPictureBook>",
-          "Include" : "RosettaPictureBook.h"
+          "Name": "PictureBook",
+          "Function": "createExtActor<RosettaPictureBook>",
+          "Include": "RosettaPictureBook.h"
+        }
+      ],
+      "NewSaveChunk": [
+        {
+          "ChunkMemberType": "PictureBookDataStorage",
+          "ChunkMemberName": "mPictureBookDataStorage",
+          "ChunkCreationFunc": "createBinaryChunk<PictureBookDataStorage>",
+          "Include": "PictureBookDataStorage.h"
+        }
+      ],
+      "GLE__isJMapEntryProgressComplete": [
+        {
+          "Name": "PictureBookJMapProgress",
+          "Function": "PictureBookDataUtil::isReadChapterJMapProgress",
+          "Include": "PictureBookDataStorage.h"
         }
       ]
     }

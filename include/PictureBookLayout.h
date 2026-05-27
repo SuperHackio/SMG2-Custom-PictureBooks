@@ -28,7 +28,7 @@ public:
 
 class PictureBookLayout : public LayoutActor {
 public:
-    PictureBookLayout(const JMapInfo*);
+    PictureBookLayout(const char* pBookName, const JMapInfo*);
 
     virtual void appear();
     virtual void kill();
@@ -74,6 +74,7 @@ public:
 
 private:
     const JMapInfo* mBgmInfo;
+    const char* mBookName; // Used to create unique MSBT labels
     const char* mLayoutName; // Used to create unique MSBT labels
     s32 mChapterLayoutButtonNum; // The maximum number of chapters the layout supports. Calculated at runtime.
     bool* mChapterUnlockFlags; // Determine if a chapter is unlocked or not

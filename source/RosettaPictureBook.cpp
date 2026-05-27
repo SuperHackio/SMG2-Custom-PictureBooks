@@ -52,7 +52,7 @@ void RosettaPictureBook::init(const JMapInfoIter& rIter) {
         return;
     }
 
-    mLayout = new PictureBookLayout(MR::tryCreateCsvParser(mObjectName, "BookBgm.bcsv")); // Set the bool to TRUE to auto read, false for Chapter Select. Make this depend on new unlocks?
+    mLayout = new PictureBookLayout(mObjectName, MR::tryCreateCsvParser(mObjectName, "BookBgm.bcsv")); // Set the bool to TRUE to auto read, false for Chapter Select. Make this depend on new unlocks?
     mLayout->initBookInfo(pBookTextureName, pLayoutOverride, mBookInfo);
 
     mIconAButton = new IconAButton(true, false);
