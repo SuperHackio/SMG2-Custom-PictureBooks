@@ -38,6 +38,7 @@ public:
     void initTexture(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo);
     void initContentsButton(const char* pLayoutName);
     void prepare(bool autoplay, const JMapInfo* pBookInfo);
+    bool isOpenChapter(s32 chapterNo);
 
     bool updateText();
     void updateTexture();
@@ -98,4 +99,10 @@ private:
     IconAButton* mIconAButton;
     ButtonPaneController** mContentsButtonPaneController;
     PictureBookCloseButton* mCloseButton;
+
+#ifdef GALAXY_LEVEL_ENGINE
+public:
+    const JMapInfo* mChapterUnlockInfo;
+#endif // GALAXY_LEVEL_ENGINE
+
 };

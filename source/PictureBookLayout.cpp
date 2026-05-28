@@ -5,6 +5,11 @@
 #include "Game/AudioLib/AudWrap.h"
 #include "PictureBookDataStorage.h"
 
+#ifdef GALAXY_LEVEL_ENGINE
+#include "GalaxyLevelEngine.h"
+#endif // GALAXY_LEVEL_ENGINE
+
+
 namespace {
     const s32 cMaxPagePerChapter = 100;
     const s32 cBookOpenFrame = 60;
@@ -54,18 +59,6 @@ namespace {
             pMsg = pFailsafeText;
 
         MR::setTextBoxMessageRecursive(pBookLayout, pPaneName, pMsg);
-    }
-
-    bool isOpenChapter(const char* pBookName, s32 chapterNo) {
-        bool GLEResult = true;
-#if GALAXY_LEVEL_ENGINE
-        // TODO
-#endif // GALAXY_LEVEL_ENGINE
-        bool SuperFlagResult = true;
-#if SuperFlag
-        // TODO: SuperFlag doesn't actually allow it being optional. Gotta talk to TMC about that...
-#endif // SuperFlag
-        return GLEResult && SuperFlagResult;
     }
 }
 
@@ -203,7 +196,7 @@ void PictureBookLayout::prepare(bool autoplay, const JMapInfo* pBookInfo) {
     mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been read before, according to the flags. Fix this!
     mChapterNo = 0;
     for (s32 i = 0; i < mChapterMax; i++) {
-        mChapterUnlockFlags[i] = isOpenChapter(mBookName, i+1);
+        mChapterUnlockFlags[i] = isOpenChapter(i+1);
         mChapterReadFlags[i] = PictureBookDataUtil::isReadChapter(mBookName, i+1);
 
         if (mChapterReadFlags[i])
@@ -265,6 +258,28 @@ void PictureBookLayout::control() {
     }
 }
 
+
+bool PictureBookLayout::isOpenChapter(s32 chapterNo) {
+    bool GLEResult = true;
+#ifdef GALAXY_LEVEL_ENGINE
+    if (mChapterUnlockInfo) {
+        for (s32 i = 0; i < MR::getCsvDataElementNum(mChapterUnlockInfo); i++) {
+            s32 id;
+            MR::getCsvDataS32(&id, mChapterUnlockInfo, "ChapterNo", i);
+            if (id != chapterNo)
+                continue;
+
+            GLEResult = GLE::isJMapEntryProgressComplete(mChapterUnlockInfo, i);
+            break;
+        }
+    }
+#endif // GALAXY_LEVEL_ENGINE
+    bool SuperFlagResult = true;
+#if SuperFlag
+    // TODO: SuperFlag doesn't actually allow it being optional. Gotta talk to TMC about that...
+#endif // SuperFlag
+    return GLEResult && SuperFlagResult;
+}
 
 bool PictureBookLayout::updateText() {
     char messageId[64];
@@ -478,9 +493,9 @@ bool PictureBookLayout::chapterNext() {
     do
     {
         mChapterNo += mNextItemDir;
-    } while (mChapterMin > mChapterNo && mChapterMax < mChapterNo && !isOpenChapter(mBookName, mChapterNo));
+    } while (mChapterNo >= mChapterMin && mChapterNo <= mChapterMax && !isOpenChapter(mChapterNo));
 
-    if (mChapterMax < mChapterNo || mChapterMin > mChapterNo) {
+    if (mChapterNo > mChapterMax || mChapterNo < mChapterMin) {
         return false;
     }
 
@@ -699,7 +714,8 @@ void PictureBookLayout::exeOpen() {
 
     if (MR::isStep(this, stepMin)) {
         for (s32 i = 0; i < mChapterMax; i++) {
-            mContentsButtonPaneController[i]->appear();
+            if (isOpenChapter(i+1))
+                mContentsButtonPaneController[i]->appear();
         }
 
         mCloseButton->appear();
@@ -919,7 +935,7 @@ void PictureBookLayout::exeWaitWithText() {
                 do
                 {
                     curChapter += -1;
-                } while (mChapterMin <= curChapter && !isOpenChapter(mBookName, curChapter));
+                } while (curChapter >= mChapterMin && !isOpenChapter(curChapter));
 
                 if (curChapter >= mChapterMin || (mPageNo > 0 || mTextIndex > 0))
                 {

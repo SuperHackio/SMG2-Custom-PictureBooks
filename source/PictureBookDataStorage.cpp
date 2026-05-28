@@ -137,7 +137,7 @@ namespace PictureBookDataUtil {
             MR::BitArray* tmp = (MR::BitArray*)&mem;
             tmp->mFlagCount = 32;
             tmp->mFlags = (u8*)&pStorage->mDataEntries[i]->mChapterReadFlags;
-            return tmp->set(chapter - 1, isRead);// Chapters are offset by 1. Don't want to waste bits tho
+            return tmp->set(chapter - 1, isRead); // Chapters are offset by 1. Don't want to waste bits tho
         }
     }
 
@@ -155,7 +155,7 @@ namespace PictureBookDataUtil {
             MR::BitArray* tmp = (MR::BitArray*) & mem;
             tmp->mFlagCount = 32;
             tmp->mFlags = (u8*)&pStorage->mDataEntries[i]->mChapterReadFlags;
-            return tmp->isOn(chapter - 1);// Chapters are offset by 1. Don't want to waste bits tho
+            return tmp->isOn(chapter - 1); // Chapters are offset by 1. Don't want to waste bits tho
         }
         return false; // Default to being unread
     }

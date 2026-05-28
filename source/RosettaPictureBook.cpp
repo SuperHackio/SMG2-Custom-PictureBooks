@@ -53,6 +53,9 @@ void RosettaPictureBook::init(const JMapInfoIter& rIter) {
     }
 
     mLayout = new PictureBookLayout(mObjectName, MR::tryCreateCsvParser(mObjectName, "BookBgm.bcsv")); // Set the bool to TRUE to auto read, false for Chapter Select. Make this depend on new unlocks?
+#ifdef GALAXY_LEVEL_ENGINE
+    mLayout->mChapterUnlockInfo = MR::tryCreateCsvParser(mObjectName, "ChapterInfo.bcsv");
+#endif // GALAXY_LEVEL_ENGINE
     mLayout->initBookInfo(pBookTextureName, pLayoutOverride, mBookInfo);
 
     mIconAButton = new IconAButton(true, false);
