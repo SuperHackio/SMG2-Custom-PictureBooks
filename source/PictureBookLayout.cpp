@@ -2,6 +2,14 @@
 #include "PictureBookLayout.h"
 #include "OtherUtils.h"
 
+#include "Game/AudioLib/AudWrap.h"
+#include "PictureBookDataStorage.h"
+
+#ifdef GALAXY_LEVEL_ENGINE
+#include "GalaxyLevelEngine.h"
+#endif // GALAXY_LEVEL_ENGINE
+
+
 namespace {
     const s32 cMaxPagePerChapter = 100;
     const s32 cBookOpenFrame = 60;
@@ -52,27 +60,12 @@ namespace {
 
         MR::setTextBoxMessageRecursive(pBookLayout, pPaneName, pMsg);
     }
-
-    bool isOpenChapter(s32 chapterNo) {
-        bool GLEResult = true;
-#if GALAXY_LEVEL_ENGINE
-        // TODO
-#endif // GALAXY_LEVEL_ENGINE
-        bool SuperFlagResult = true;
-#if SuperFlag
-        // TODO: SuperFlag doesn't actually allow it being optional. Gotta talk to TMC about that...
-#endif // SuperFlag
-        return GLEResult && SuperFlagResult;
-    }
-
-    bool isReadChapter(s32 chapterNo) {
-        return true;
-    }
 }
 
-PictureBookLayout::PictureBookLayout(const JMapInfo* pBgmInfo) :
+PictureBookLayout::PictureBookLayout(const char* pBookName, const JMapInfo* pBgmInfo) :
     LayoutActor("絵本レイアウト", true),
     mBgmInfo(pBgmInfo),
+    mBookName(pBookName),
     mLayoutName(nullptr),
     mChapterLayoutButtonNum(0),
     mChapterUnlockFlags(nullptr),
@@ -120,7 +113,7 @@ void PictureBookLayout::initBookInfo(const char* pTextureName, const char* pLayo
         isPaneExist = _mManager->findPaneByName(buttonPaneName);
     } while (isPaneExist);
     mChapterLayoutButtonNum--; // subtract one because this is calculated starting at 1, not 0
-    OSReport("Layout chapter button count: %d\n", mChapterLayoutButtonNum);
+    //OSReport("Layout chapter button count: %d\n", mChapterLayoutButtonNum);
     mContentsButtonPaneController = new ButtonPaneController * [mChapterLayoutButtonNum];
     initContentsButton(pLayoutName);
     mCloseButton = new PictureBookCloseButton(true);
@@ -200,11 +193,11 @@ void PictureBookLayout::prepare(bool autoplay, const JMapInfo* pBookInfo) {
     // This handles unlocking chapters, which chapters have been read already, and which chapters should be shown when autoplay is used
     // Call this before calling appear
 
-    mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been ready before, according to the flags. Fix this!
+    mIsAutoPlay = autoplay; // TODO: Autoplay counts everything as being read before because... well, everything HAS been read before, according to the flags. Fix this!
     mChapterNo = 0;
     for (s32 i = 0; i < mChapterMax; i++) {
         mChapterUnlockFlags[i] = isOpenChapter(i+1);
-        mChapterReadFlags[i] = isReadChapter(i+1);
+        mChapterReadFlags[i] = PictureBookDataUtil::isReadChapter(mBookName, i+1);
 
         if (mChapterReadFlags[i])
             continue;
@@ -223,7 +216,7 @@ void PictureBookLayout::appear() {
     mNotReadedPageNo = -1;
     mNotReadedTextIndex = -1;
     mNextItemDir = 1;
-    mIsNextItemFast = false;
+    mIsNextItemFast = !mIsAutoPlay;
 
     if (mIsAutoPlay) {
         MR::hidePaneRecursive(this, "Contents");
@@ -266,6 +259,28 @@ void PictureBookLayout::control() {
 }
 
 
+bool PictureBookLayout::isOpenChapter(s32 chapterNo) {
+    bool GLEResult = true;
+#ifdef GALAXY_LEVEL_ENGINE
+    if (mChapterUnlockInfo) {
+        for (s32 i = 0; i < MR::getCsvDataElementNum(mChapterUnlockInfo); i++) {
+            s32 id;
+            MR::getCsvDataS32(&id, mChapterUnlockInfo, "ChapterNo", i);
+            if (id != chapterNo)
+                continue;
+
+            GLEResult = GLE::isJMapEntryProgressComplete(mChapterUnlockInfo, i);
+            break;
+        }
+    }
+#endif // GALAXY_LEVEL_ENGINE
+    bool SuperFlagResult = true;
+#if SuperFlag
+    // TODO: SuperFlag doesn't actually allow it being optional. Gotta talk to TMC about that...
+#endif // SuperFlag
+    return GLEResult && SuperFlagResult;
+}
+
 bool PictureBookLayout::updateText() {
     char messageId[64];
 
@@ -292,7 +307,7 @@ bool PictureBookLayout::updateText() {
 void PictureBookLayout::updateTexture() {
     s32 textureNum = getTextureNum(mChapterNo);
     s32 pageNo = mPageNo;
-    OSReport("updatetexture ChapterNo PageNo NextItemDir TextureNum: %d, %d, %d, %d\n", mChapterNo, mPageNo, mNextItemDir, textureNum);
+    //OSReport("updatetexture ChapterNo PageNo NextItemDir TextureNum: %d, %d, %d, %d\n", mChapterNo, mPageNo, mNextItemDir, textureNum);
 
     if (mNextItemDir > 0) {
         pageNo = mPageNo - 1;
@@ -339,11 +354,83 @@ void PictureBookLayout::updateTexture() {
     }
 }
 
-void PictureBookLayout::updateBgm() {
+extern "C" {
+    void __kAutoMap_80085F70(u32*, AudSoundNameConverter*, const char*);
+}
+
+void PictureBookLayout::updateBgm(s32 chapter, s32 page, s32 textline) {
     if (mBgmInfo == nullptr)
         return;
 
-    // TODO
+    //OSReport("BGM: %d %d %d\n", chapter, page, textline);
+    // Track down the BCSV row that corresponds to the chapter page and textline
+    s32 idx = -1;
+    s32 count = MR::getCsvDataElementNum(mBgmInfo);
+    for (s32 i = 0; i < count; i++) {
+        s32 C, P, T;
+        MR::getCsvDataS32(&C, mBgmInfo, "Chapter", i);
+        MR::getCsvDataS32(&P, mBgmInfo, "Page", i);
+        MR::getCsvDataS32(&T, mBgmInfo, "Text", i);
+
+        if (C != chapter && C != -1) // If -1, we ignore it
+            continue;
+
+        if (P != page && P != -1) // If -1, we ignore it
+            continue;
+
+        if (T != textline && T != -1) // If -1, we ignore it
+            continue;
+
+        idx = i;
+        break;
+    }
+
+    if (idx < 0)
+        return; // Return without doing anything...
+
+    // We do need to attempt a music change now
+    const char* pLabel;
+    MR::getCsvDataStrOrNULL(&pLabel, mBgmInfo, "BgmName", idx);
+    s32 state = 0;
+    MR::getCsvDataS32(&state, mBgmInfo, "BgmStateNo", idx);
+    s32 wipeout = 120;
+    s32 statechange = 120;
+    if (MR::hasCsvItem(mBgmInfo, "BgmWipeoutFrame"))
+        MR::getCsvDataS32(&wipeout, mBgmInfo, "BgmWipeoutFrame", idx);
+    if (MR::hasCsvItem(mBgmInfo, "BgmStateFrame"))
+        MR::getCsvDataS32(&statechange, mBgmInfo, "BgmStateFrame", idx);
+    if (wipeout < 0)
+        wipeout = 120;
+    if (statechange < 0)
+        statechange = 120;
+
+    //OSReport("%03d: %s @ %d ^ %d (%d)\n", idx, pLabel, state, statechange, wipeout);
+    if (pLabel == nullptr) { // Calling for no BGM
+        MR::stopStageBGM(wipeout);
+    }
+    else { // New BGM will start
+        if (MR::isEqualCurrentStageBgmName(pLabel)) {
+            MR::setStageBGMState(state, statechange);
+            //OSReport("Same Song playing\n");
+        }
+        else if (MR::isStopOrFadeoutBgmName(pLabel)) {
+            MR::startStageBGM(pLabel, false);
+            MR::setStageBGMState(state, statechange);
+            //OSReport("BGM: IsStopOrFadeOut = TRUE\n");
+        }
+        else {
+            MR::clearBgmQueue();
+            AudSoundNameConverter* psoundconverter = AudSingletonHolder<AudSoundNameConverter>::sInstance;
+            u32 ID;
+            const char* ptemp = pLabel;
+            // The fact that this is REQUIRED is rediclous...
+            __kAutoMap_80085F70(&ID, psoundconverter, pLabel);
+            AudWrap::setNextIdStageBgm(ID);
+            MR::stopStageBGM(wipeout);
+            MR::setStageBGMState(state, statechange);
+            //OSReport("BGM: IsStopOrFadeOut = FALSE | isPlayingStageBgmName = FALSE\n");
+        }
+    }
 }
 
 s32 PictureBookLayout::getTextureNum(s32 chapterNo) const {
@@ -364,6 +451,7 @@ s32 PictureBookLayout::getPageNum(s32 chapterNo) const {
 
     return 1; // minimum 1 because of the title, which always exists
 }
+
 
 bool PictureBookLayout::textNext() {
     if (mPageNo == 0) {
@@ -399,9 +487,15 @@ bool PictureBookLayout::pageNext() {
 }
 
 bool PictureBookLayout::chapterNext() {
-    mChapterNo += mNextItemDir;
+    if (mNextItemDir > 0) // going forward? We can complete the chapter
+        PictureBookDataUtil::setReadChapter(mBookName, mChapterNo);
 
-    if (mChapterMax < mChapterNo) {
+    do
+    {
+        mChapterNo += mNextItemDir;
+    } while (mChapterNo >= mChapterMin && mChapterNo <= mChapterMax && !isOpenChapter(mChapterNo));
+
+    if (mChapterNo > mChapterMax || mChapterNo < mChapterMin) {
         return false;
     }
 
@@ -417,6 +511,7 @@ bool PictureBookLayout::chapterNext() {
     return true;
 }
 
+
 void PictureBookLayout::updateTexMapChapterBase() {
     if (mChapterNo == 0) {
         mChapterPageTextureStorage = nullptr;
@@ -424,17 +519,18 @@ void PictureBookLayout::updateTexMapChapterBase() {
     }
 
     mChapterPageTextureStorage = mAllPageTextureStorage[mChapterNo-1].mTex;
-    OSReport("Registered tex for chapter %d\n", mChapterNo-1);
+    //OSReport("Registered tex for chapter %d\n", mChapterNo-1);
 }
 
 bool PictureBookLayout::isReadedCurrentText() const {
+    if (PictureBookDataUtil::isReadChapter(mBookName, mChapterNo))
+        return true;
+
     bool r7;
     bool r5;
+    bool result;
 
-    if (mContentsButtonPaneController) {
-        return true;
-    }
-    bool result = true;
+    result = true;
     r7 = true;
     if (mChapterNo >= mNotReadedChapterNo) {
         r5 = false;
@@ -464,31 +560,11 @@ bool PictureBookLayout::isReadedCurrentText() const {
 }
 
 s32 PictureBookLayout::getReadSpeed() const {
-    bool b = !mIsAutoPlay || mIsNextItemFast;
-
-    if (b) {
-        return 3;
-    }
-    else {
-        return 1;
-    }
+    return mIsNextItemFast ? 3 : 1;
 }
 
-bool PictureBookLayout::isBookEndCurrentText() const { // TODO: Rewrite this?
-    bool r31 = false;
-    bool r30 = false;
-
-    if (mChapterNo == 9) {
-        if (mPageNo ==  getPageNum(mChapterNo)) {
-            r30 = true;
-        }
-    }
-    if (r30) {
-        if (getCurrentMaxTextIndex() == mTextIndex) {
-            r31 = true;
-        }
-    }
-    return r31;
+bool PictureBookLayout::isBookEndCurrentText() const {
+    return mChapterNo == mChapterMax && mPageNo == getPageNum(mChapterNo) && mTextIndex == getCurrentMaxTextIndex();
 }
 
 void PictureBookLayout::setTextAlpha(f32 alpha) {
@@ -621,7 +697,7 @@ void PictureBookLayout::exeOpen() {
         MR::startAnim(this, "Appear", 0);
         MR::setAnimFrameAndStop(this, 0.0f, 0);
         MR::openWipeFade(cFadeFrame);
-        MR::startStageBGM("STM_PROLOGUE_01", false);
+        updateBgm(0, 0, 0); // Chapter 0 page 0 text 0 is the default song
     }
     if (MR::isStep(this, cBookOpenFrame)) {
         MR::setAnimRate(this, 1.0f, 0);
@@ -638,7 +714,8 @@ void PictureBookLayout::exeOpen() {
 
     if (MR::isStep(this, stepMin)) {
         for (s32 i = 0; i < mChapterMax; i++) {
-            mContentsButtonPaneController[i]->appear();
+            if (isOpenChapter(i+1))
+                mContentsButtonPaneController[i]->appear();
         }
 
         mCloseButton->appear();
@@ -751,8 +828,8 @@ void PictureBookLayout::exeFadeIn() {
         MR::setAnimFrameAndStop(this, animFrame, 0);
         MR::openWipeFade(cFadeFrame / getReadSpeed());
 
-        if (mContentsButtonPaneController == nullptr) {
-            MR::startStageBGM("STM_PROLOGUE_01", false);
+        if (mIsAutoPlay) {
+            updateBgm(mChapterNo, mPageNo, mTextIndex);
         }
     }
 
@@ -762,9 +839,7 @@ void PictureBookLayout::exeFadeIn() {
 }
 
 void PictureBookLayout::exeWaitNoText() {
-    bool b = !mIsAutoPlay || mIsNextItemFast;
-
-    MR::setNerveAtStep(this, &NrvPictureBookLayout::PictureBookLayoutNrvFadeInText::sInstance, b ? 0 : cWaitNoTextFrame);
+    MR::setNerveAtStep(this, &NrvPictureBookLayout::PictureBookLayoutNrvFadeInText::sInstance, mIsNextItemFast ? 0 : cWaitNoTextFrame);
 }
 
 void PictureBookLayout::exeFadeInText() {
@@ -789,7 +864,7 @@ void PictureBookLayout::exeFadeInText() {
             }
         }
 
-        // Here there was a bunch of code for the music on special pages //
+        updateBgm(mChapterNo, mPageNo, mTextIndex);
        
         if (isBookEndCurrentText()) {
             setTextBoxHorizontalPositionRecursive(this, "Text", 1);
@@ -856,7 +931,14 @@ void PictureBookLayout::exeWaitWithText() {
             bool isTriggerPrevPage = MR::testCorePadTriggerLeft(0) || MR::testSubPadStickTriggerLeft(0);
 
             if (isTriggerPrevPage) {
-                if (mChapterMin < mChapterNo || mPageNo > 0 || mTextIndex > 0) {
+                s32 curChapter = mChapterNo;
+                do
+                {
+                    curChapter += -1;
+                } while (curChapter >= mChapterMin && !isOpenChapter(curChapter));
+
+                if (curChapter >= mChapterMin || (mPageNo > 0 || mTextIndex > 0))
+                {
                     MR::startSystemSE("SE_SY_TALK_FOCUS_ITEM", -1, -1);
 
                     if (isValidCloseButton()) {
@@ -903,9 +985,6 @@ void PictureBookLayout::exeFadeOutText() {
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvPageNext::sInstance);
         }
         else if (chapterNext()) {
-            if (MR::isPlayingStageBgmName("STM_PROLOGUE_01_B")) {
-                MR::stopStageBGM(120);
-            }
             setNerve(&NrvPictureBookLayout::PictureBookLayoutNrvFadeOut::sInstance);
         }
         else if (mIsAutoPlay) {

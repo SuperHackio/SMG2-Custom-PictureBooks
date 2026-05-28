@@ -28,7 +28,7 @@ public:
 
 class PictureBookLayout : public LayoutActor {
 public:
-    PictureBookLayout(const JMapInfo*);
+    PictureBookLayout(const char* pBookName, const JMapInfo*);
 
     virtual void appear();
     virtual void kill();
@@ -38,10 +38,11 @@ public:
     void initTexture(const char* pTextureName, const char* pLayoutName, const JMapInfo* pBookInfo);
     void initContentsButton(const char* pLayoutName);
     void prepare(bool autoplay, const JMapInfo* pBookInfo);
+    bool isOpenChapter(s32 chapterNo);
 
     bool updateText();
     void updateTexture();
-    void updateBgm();
+    void updateBgm(s32 chapter, s32 page, s32 textline);
     s32 getTextureNum(s32 chapterNo) const;
     s32 getPageNum(s32 chapterNo) const;
 
@@ -74,6 +75,7 @@ public:
 
 private:
     const JMapInfo* mBgmInfo;
+    const char* mBookName; // Used to create unique MSBT labels
     const char* mLayoutName; // Used to create unique MSBT labels
     s32 mChapterLayoutButtonNum; // The maximum number of chapters the layout supports. Calculated at runtime.
     bool* mChapterUnlockFlags; // Determine if a chapter is unlocked or not
@@ -97,4 +99,10 @@ private:
     IconAButton* mIconAButton;
     ButtonPaneController** mContentsButtonPaneController;
     PictureBookCloseButton* mCloseButton;
+
+#ifdef GALAXY_LEVEL_ENGINE
+public:
+    const JMapInfo* mChapterUnlockInfo;
+#endif // GALAXY_LEVEL_ENGINE
+
 };
